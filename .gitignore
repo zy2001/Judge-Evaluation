@@ -1,0 +1,20 @@
+HELP.md
+
+data/
+datas/
+lib/
+testcase/
+
+!**/src/**
+
+### Clion ###
+cmake-build-debug/
+
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+
