@@ -16,17 +16,26 @@
 
 
 //-1系统错误
+/**
+ * 运行程序，检测资源使用
+ * @param runId         - 运行编号
+ * @param pid           - 题目编号
+ * @param timeLimit     - 时间限制
+ * @param memoryLimit   - 内存限制
+ * @param caseCount     -测试样例数目
+ * @return 运行结果编码
+ */
 int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLimit, int memoryLimit, int caseCount) {
     //最长运行时间，最大使用内存
     long long maxTimeUsage = 0, maxMemoryUsage = 0;
     //逐个TestCase运行
-    for (int i = 1; i <= caseCount; i++) {
+    for (int caseNumber = 1; caseNumber <= caseCount; caseNumber++) {
         PROCESS_INFORMATION pi;
         STARTUPINFO si;
         ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
         ZeroMemory(&si, sizeof(STARTUPINFOA));
         //重载子进程IO
-        if (!JudgeCore::setUpIORedirection(si, runId, pid, Utils::parseString(i))) {
+        if (!JudgeCore::setUpIORedirection(si, runId, pid, Utils::parseString(caseNumber))) {
             printf("Create Fail\n");
             return SYSTEM_ERROR;
         }
@@ -42,10 +51,6 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
         if (exitCode == STILL_ACTIVE) {
             JudgeCore::killProcess(pi);
         }
-        if (exitCode != 0) {
-            printf("RunTime Error!\n");
-            return RUNTIME_ERROR;
-        }
         if (timeUsage >= timeLimit) {
             printf("Time Limit Exceeded!\n");
             return TIME_LIMIT_EXCEEDED;
@@ -54,7 +59,11 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
             printf("Memory Limit Exceeded!\n");
             return MEMORY_LIMIT_EXCEEDED;
         }
-        printf("Memory:%I64dKB Time:%I64dms\n", memoryUsage, timeUsage);
+        if (exitCode != 0) {
+            printf("RunTime Error!\n");
+            return RUNTIME_ERROR;
+        }
+        printf("Memory:%lldKB Time:%lldms\n", memoryUsage, timeUsage);
         maxTimeUsage = std::max(timeUsage, maxTimeUsage);
         maxMemoryUsage = std::max(memoryUsage, maxMemoryUsage);
         CloseHandle(pi.hProcess);
@@ -63,15 +72,21 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
         CloseHandle(si.hStdOutput);
 
         //校验结果
+        int result = answerCompare(runId, pid, Utils::parseString(caseNumber));
+
+        if(ACCEPT != result) {
+            //答案不正确
+            return result;
+        }
     }
 
     //答案正确更新runTime, runMemory
-    std::string sql = "UPDATE SUBMIT SET RUN_TIME = " + Utils::parseString(maxTimeUsage) + " , RUN_MEMORY = " + Utils::parseString(maxMemoryUsage) +" WHERE RID = " + runId;
-    debug(sql);
+    std::string sql = "UPDATE SUBMIT SET RUN_TIME = " + Utils::parseString(maxTimeUsage) + " , RUN_MEMORY = " +
+                      Utils::parseString(maxMemoryUsage) + " WHERE RID = " + runId;
+//    debug(sql);
     Connect::mysql_update(sql.c_str());
     return ACCEPT;
 }
-
 
 /**
  * 重定向子进程IO
@@ -133,8 +148,8 @@ bool JudgeCore::createProcess(STARTUPINFO &si, PROCESS_INFORMATION &pi, std::str
     std::string cmd = "../data/" + runId + "/main.exe";
     std::cout << cmd << std::endl;
     //char cmdd[] = "D:\\JudgeClient\\Data\\" + runid + "main.exe";
-    bool ret = CreateProcess(NULL, (LPSTR) cmd.c_str(), NULL, NULL, TRUE,
-                             flags, NULL, NULL, &si, &pi);
+    bool ret = CreateProcess(nullptr, (LPSTR) cmd.c_str(), nullptr, nullptr, TRUE,
+                             flags, nullptr, nullptr, &si, &pi);
     return ret;
 }
 
@@ -147,36 +162,53 @@ bool JudgeCore::createProcess(STARTUPINFO &si, PROCESS_INFORMATION &pi, std::str
  * @param memoryUsage - 运行内存使用(KB)
  * @return 进程退出代码
  */
-
-DWORD JudgeCore::runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, long long &timeUsage, long long timeLimit, long long memoryLimit) {
+DWORD JudgeCore::runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, long long &timeUsage, long long timeLimit,
+                            long long memoryLimit) {
     long long reservedTime = timeLimit * 9;
     auto feature = std::async(std::launch::async, JudgeCore::getMaxMemoryUsage, std::ref(pi), memoryLimit);
+    //唤醒子进程
     ResumeThread(pi.hThread);
-
     //等待线程运行
-    WaitForSingleObject(pi.hProcess, DWORD(timeLimit + reservedTime));
+//    WaitForSingleObject(pi.hProcess, DWORD(timeLimit + reservedTime));
+//    Sleep(timeLimit + reservedTime);
+    FILETIME creationTime;
+    FILETIME exitTime;
+    FILETIME kernelTime;
+    FILETIME userTime;
+    //debug cnt
+    int cnt = 1;
+    while (GetThreadTimes(pi.hThread, &creationTime, &exitTime, &kernelTime, &userTime) &&
+           getExitCode(pi.hProcess) == STILL_ACTIVE) {
 
-    FILETIME creationTimeEnd;
-    FILETIME exitTimeEnd;
-    FILETIME kernelTimeEnd;
-    FILETIME userTimeEnd;
-    GetThreadTimes(pi.hThread, &creationTimeEnd, &exitTimeEnd, &kernelTimeEnd, &userTimeEnd);
+        //计算内核态耗时
+        FILETIME kernelFileTimeDiff;
+        kernelFileTimeDiff.dwHighDateTime = kernelTime.dwHighDateTime;
+        kernelFileTimeDiff.dwLowDateTime = kernelTime.dwLowDateTime;
+        SYSTEMTIME kernelSysTimeDiff;
+        FileTimeToSystemTime(&kernelFileTimeDiff, &kernelSysTimeDiff);
+        timeUsage = (long long) kernelSysTimeDiff.wMinute * 60000 + kernelSysTimeDiff.wSecond * 1000 +
+                    kernelSysTimeDiff.wMilliseconds;
+        //计算用户态耗时
+        FILETIME userFileTimeDiff;
+        userFileTimeDiff.dwHighDateTime = userTime.dwHighDateTime;
+        userFileTimeDiff.dwLowDateTime = userTime.dwLowDateTime;
+        SYSTEMTIME userSysTimeDiff;
+        FileTimeToSystemTime(&userFileTimeDiff, &userSysTimeDiff);
+        long long userTimeUsage =
+                userSysTimeDiff.wMinute * 60000 + userSysTimeDiff.wSecond * 1000 + userSysTimeDiff.wMilliseconds;
 
-    SYSTEMTIME kernelSysTimeDiff;
-    FILETIME kernelFileTimeDiff;
-    kernelFileTimeDiff.dwHighDateTime = kernelTimeEnd.dwHighDateTime;
-    kernelFileTimeDiff.dwLowDateTime = kernelTimeEnd.dwLowDateTime;
-    FileTimeToSystemTime(&kernelFileTimeDiff, &kernelSysTimeDiff);
-
-    printf("thread kernal exec time = %d\n",
-           kernelSysTimeDiff.wSecond * 1000 + kernelSysTimeDiff.wMilliseconds); // 内核层运行时间
-
-    timeUsage = (long long) kernelSysTimeDiff.wSecond * 1000 + kernelSysTimeDiff.wMilliseconds;
-
-    if (getExitCode(pi.hProcess) == STILL_ACTIVE) {
-        killProcess(pi);
+        printf("thread kernel exec time%d = %lld,  %lld\n", cnt++, timeUsage, userTimeUsage); // 内核层运行时间
+        //超时杀死进程
+        if (timeUsage > timeLimit || userTimeUsage > timeLimit * TIME_LIMIT_EXCEEDED_WEIGHT) {
+            debug("Time Limit Exceeded: " + Utils::parseString(timeUsage) + " > " + Utils::parseString(timeLimit));
+            if (timeUsage <= timeLimit) timeUsage = timeLimit + 1;
+            killProcess(pi);
+            break;
+        }
+        Sleep(1);
     }
     memoryUsage = feature.get();
+//    debug(getExitCode(pi.hProcess));
     return getExitCode(pi.hProcess);
 }
 
@@ -283,4 +315,75 @@ bool JudgeCore::killProcess(PROCESS_INFORMATION &pi) {
         return false;
     }
     return true;
+}
+
+/**
+ * 对比运行结果
+ * @param runId         - 运行编号
+ * @param pid           - 题目编号
+ * @param caseId        - 样例编号
+ * @return 运行结果编码
+ */
+int JudgeCore::answerCompare(std::string runId, std::string pid, std::string caseId) {
+    //读标准输出
+    std::string std = Utils::readFile("../testcase/" + pid + "/" + caseId + ".out");
+    //忽略结尾换行符
+    std = Utils::ignoreLineEnd(std);
+    //读程序输出
+    std::string out = Utils::readFile("../data/" + runId + "/" + caseId + ".out");
+    //忽略结尾换行符
+    out = Utils::ignoreLineEnd(out);
+    //判别ACCEPT
+    if (JudgeCore::isAccept(std, out)) {
+        return ACCEPT;
+    }
+    //判别格式错误
+    if (JudgeCore::isPresentationError(std, out)) {
+        return PRESENTATION_ERROR;
+    }
+    //答案错误
+    return WRONG_ANSWER;
+}
+
+/**
+ * 判别是否正确
+ * @param std   - 标准输出
+ * @param out   - 程序输出
+ * @return 是否正确
+ */
+bool JudgeCore::isAccept(std::string &std, std::string &out) {
+    //长度不相等不匹配，返回false
+    if (std.length() != out.length()) return false;
+    for (int i = 0; i < std.length(); i++) {
+        if (std[i] != out[i]) {
+            //字符不相等，返回false
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * 判别是否格式错误
+ * @param std   - 标准输出
+ * @param out   - 程序输出
+ * @return 是否格式错误
+ */
+bool JudgeCore::isPresentationError(std::string &std, std::string &out) {
+    int i = 0, j = 0;
+    while (i < std.length() && j < out.length()) {
+        if (std[i] == ' ' || std[i] == '\n') {
+            i++;
+        } else if (out[j] == ' ' || out[j] == '\n') {
+            j++;
+        } else if (std[i] != out[j]) { break; }
+        else {
+            i++;
+            j++;
+        }
+    }
+    if (i == std.length() && j == out.length()) {
+        return true;
+    }
+    return false;
 }

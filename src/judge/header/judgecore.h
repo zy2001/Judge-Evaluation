@@ -10,6 +10,16 @@
 
 class JudgeCore{
 public:
+
+    /**
+     * 运行程序，检测资源使用
+     * @param runId         - 运行编号
+     * @param pid           - 题目编号
+     * @param timeLimit     - 时间限制
+     * @param memoryLimit   - 内存限制
+     * @param caseCount     -测试样例数目
+     * @return 运行结果编码
+     */
     static int run(const std::string &runId, const std::string &pid, int timeLimit, int memoryLimit, int caseCount);
 
     /**
@@ -76,6 +86,31 @@ public:
      * @return 退出代码
      */
     static DWORD getExitCode(HANDLE &hProcess);
+
+    /**
+     * 对比运行结果
+     * @param runId         - 运行编号
+     * @param pid           - 题目编号
+     * @param caseId        - 样例编号
+     * @return 运行结果编码
+     */
+    static int answerCompare(std::string runId, std::string pid, std::string caseId);
+
+    /**
+     * 判别是否正确
+     * @param std   - 标准输出
+     * @param out   - 程序输出
+     * @return 是否正确
+     */
+    static bool isAccept(std::string &std, std::string &out);
+
+    /**
+     * 判别是否格式错误
+     * @param std   - 标准输出
+     * @param out   - 程序输出
+     * @return 是否格式错误
+     */
+    static bool isPresentationError(std::string &std, std::string &out);
 };
 
 

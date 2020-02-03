@@ -7,7 +7,6 @@
 #include "../../config.h"
 #include "../header/manager.h"
 #include "../../utils/header/utils.h"
-
 #include "../../judge/header/judgecore.h"
 #include "../../compile/header/compile.h"
 #include "../../database/header/connect.h"
@@ -84,17 +83,14 @@ void Manager::run() {
             //更新评测结果
             std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(resultStatus) + " WHERE RID = " +
                               judgeItem.getRid();
-            debug(sql);
+//            debug(sql);
             Connect::mysql_update(sql.c_str());
             //删除目录下所有文件
             Utils::DeleteAllFiles(folderPath);
             //删除目录
             RemoveDirectory(folderPath.c_str());
         }
-
     }
-
-
 }
 
 bool Manager::getProblemDetail(const std::string &runId, const std::string &pid, int &timeLimit, int &memoryLimit,

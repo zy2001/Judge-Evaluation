@@ -2,12 +2,11 @@
 // Created by zy on 2020/2/1.
 //
 
-#include <cstring>
-#include <algorithm>
-#include <fileapi.h>
 #include <io.h>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
+#include <fileapi.h>
 #include "../header/utils.h"
 
 int Utils::parseInt(std::string str) {
@@ -72,6 +71,15 @@ std::string Utils::readFile(std::string path) {
     tmp << file.rdbuf();
     std::string str = tmp.str();
     return str;
+}
+
+std::string &Utils::ignoreLineEnd(std::string &str) {
+    int cut = 0;
+    for (cut = str.length() - 1; cut >= 0; --cut) {
+        if (str[cut] != '\n') break;
+    }
+//    debug(str);
+    return str.erase(cut + 1, str.length());
 }
 
 
