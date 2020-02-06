@@ -14,7 +14,6 @@
 #include "../../utils/header/utils.h"
 #include "../../database/header/connect.h"
 
-
 //-1系统错误
 /**
  * 运行程序，检测资源使用
@@ -44,12 +43,23 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
             printf("Create Process Fail!\n");
             return SYSTEM_ERROR;
         }
-        long long memoryUsage = 0, timeUsage = 0;
+        long long memoryUsage = 0, timeUsage = 0, outputUsage = 0;
         printf("Judge Start!\n");
-        DWORD exitCode = JudgeCore::runProcess(pi, memoryUsage, timeUsage, timeLimit, memoryLimit);
+        DWORD exitCode = JudgeCore::runProcess(pi, runId, Utils::parseString(caseNumber), memoryUsage, timeUsage,
+                                               outputUsage, timeLimit, memoryLimit);
+        // 关闭进程相关句柄
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        CloseHandle(si.hStdInput);
+        CloseHandle(si.hStdOutput);
         printf("Judge Finished!\n");
-        if (exitCode == STILL_ACTIVE) {
-            JudgeCore::killProcess(pi);
+
+//        if (exitCode == STILL_ACTIVE) {
+//            JudgeCore::killProcess(pi);
+//        }
+        if (outputUsage > OUTPUT_LIMIT) {
+            printf("Output Limit Exceeded!\n");
+            return OUTPUT_LIMIT_EXCEEDED;
         }
         if (timeUsage >= timeLimit) {
             printf("Time Limit Exceeded!\n");
@@ -66,15 +76,11 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
         printf("Memory:%lldKB Time:%lldms\n", memoryUsage, timeUsage);
         maxTimeUsage = std::max(timeUsage, maxTimeUsage);
         maxMemoryUsage = std::max(memoryUsage, maxMemoryUsage);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        CloseHandle(si.hStdInput);
-        CloseHandle(si.hStdOutput);
 
         //校验结果
         int result = answerCompare(runId, pid, Utils::parseString(caseNumber));
 
-        if(ACCEPT != result) {
+        if (ACCEPT != result) {
             //答案不正确
             return result;
         }
@@ -83,7 +89,6 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
     //答案正确更新runTime, runMemory
     std::string sql = "UPDATE SUBMIT SET RUN_TIME = " + Utils::parseString(maxTimeUsage) + " , RUN_MEMORY = " +
                       Utils::parseString(maxMemoryUsage) + " WHERE RID = " + runId;
-//    debug(sql);
     Connect::mysql_update(sql.c_str());
     return ACCEPT;
 }
@@ -162,13 +167,17 @@ bool JudgeCore::createProcess(STARTUPINFO &si, PROCESS_INFORMATION &pi, std::str
  * @param memoryUsage - 运行内存使用(KB)
  * @return 进程退出代码
  */
-DWORD JudgeCore::runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, long long &timeUsage, long long timeLimit,
-                            long long memoryLimit) {
-    long long reservedTime = timeLimit * 9;
-    auto feature = std::async(std::launch::async, JudgeCore::getMaxMemoryUsage, std::ref(pi), memoryLimit);
+DWORD
+JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage,
+                      long long &timeUsage, long long &outputUsage, long long timeLimit,
+                      long long memoryLimit) {
+
+    auto memoryFeature = std::async(std::launch::async, JudgeCore::getMaxMemoryUsage, std::ref(pi), memoryLimit);
+
     //唤醒子进程
     ResumeThread(pi.hThread);
     //等待线程运行
+//    long long reservedTime = timeLimit * 9;
 //    WaitForSingleObject(pi.hProcess, DWORD(timeLimit + reservedTime));
 //    Sleep(timeLimit + reservedTime);
     FILETIME creationTime;
@@ -177,10 +186,11 @@ DWORD JudgeCore::runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, lon
     FILETIME userTime;
     //debug cnt
     int cnt = 1;
+    // 检测资源使用是否超限
     while (GetThreadTimes(pi.hThread, &creationTime, &exitTime, &kernelTime, &userTime) &&
            getExitCode(pi.hProcess) == STILL_ACTIVE) {
 
-        //计算内核态耗时
+        // 计算内核态耗时
         FILETIME kernelFileTimeDiff;
         kernelFileTimeDiff.dwHighDateTime = kernelTime.dwHighDateTime;
         kernelFileTimeDiff.dwLowDateTime = kernelTime.dwLowDateTime;
@@ -188,7 +198,7 @@ DWORD JudgeCore::runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, lon
         FileTimeToSystemTime(&kernelFileTimeDiff, &kernelSysTimeDiff);
         timeUsage = (long long) kernelSysTimeDiff.wMinute * 60000 + kernelSysTimeDiff.wSecond * 1000 +
                     kernelSysTimeDiff.wMilliseconds;
-        //计算用户态耗时
+        // 计算用户态耗时
         FILETIME userFileTimeDiff;
         userFileTimeDiff.dwHighDateTime = userTime.dwHighDateTime;
         userFileTimeDiff.dwLowDateTime = userTime.dwLowDateTime;
@@ -197,17 +207,27 @@ DWORD JudgeCore::runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, lon
         long long userTimeUsage =
                 userSysTimeDiff.wMinute * 60000 + userSysTimeDiff.wSecond * 1000 + userSysTimeDiff.wMilliseconds;
 
-        printf("thread kernel exec time%d = %lld,  %lld\n", cnt++, timeUsage, userTimeUsage); // 内核层运行时间
-        //超时杀死进程
+        printf("thread kernel exec time%d = %lld,  %lld\n", cnt, timeUsage, userTimeUsage); // 内核层运行时间
+        // 超时杀死进程
         if (timeUsage > timeLimit || userTimeUsage > timeLimit * TIME_LIMIT_EXCEEDED_WEIGHT) {
             debug("Time Limit Exceeded: " + Utils::parseString(timeUsage) + " > " + Utils::parseString(timeLimit));
             if (timeUsage <= timeLimit) timeUsage = timeLimit + 1;
             killProcess(pi);
             break;
         }
-        Sleep(1);
+
+
+        outputUsage = getOutputFileUsage(pi, runId, caseNumber);
+        printf("output file size%d = %lld\n", cnt++, outputUsage);
+        // 输出超限杀死进程
+        if (outputUsage > OUTPUT_LIMIT) {
+            killProcess(pi);
+            break;
+        }
+        Sleep(10);
     }
-    memoryUsage = feature.get();
+
+    memoryUsage = memoryFeature.get();
 //    debug(getExitCode(pi.hProcess));
     return getExitCode(pi.hProcess);
 }
@@ -258,7 +278,7 @@ long long JudgeCore::getMaxMemoryUsage(PROCESS_INFORMATION &pi, long long memory
         if (currentMemoryUsage > memoryLimit) {
             killProcess(pi);
         }
-        Sleep(1);
+        Sleep(10);
     } while (getExitCode(pi.hProcess) == STILL_ACTIVE);
     return maxMemoryUsage;
 }
@@ -278,6 +298,27 @@ long long JudgeCore::getMillisecondsNow() {
         return GetTickCount();
     }
 }
+
+/**
+ * 获取内存占用最大值
+ * @param pi          - 子进程信息结构体
+ * @param memoryLimit - 运行空间限制(KB)
+ * @return 最大内存使用量
+ */
+long long JudgeCore::getOutputFileUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber) {
+    long long currentOutputFileUsage = -1;
+    std::string path = "../data/" + runId + "/" + caseNumber + ".out";
+    HANDLE hFile = CreateFile(reinterpret_cast<LPCSTR>(path.c_str()), 0, FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
+    if (INVALID_HANDLE_VALUE != hFile) {
+        LARGE_INTEGER size;
+        ::GetFileSizeEx(hFile, &size);
+        currentOutputFileUsage = size.QuadPart;
+    }
+    CloseHandle(hFile);
+    return currentOutputFileUsage;
+}
+
 
 /**
  * 强制销毁进程(当触发阈值时).

@@ -48,7 +48,7 @@ public:
      * @param memoryLimit - 运行空间限制(KB)
      * @return 进程退出代码
      */
-    static DWORD runProcess(PROCESS_INFORMATION &pi, long long &memoryUsage, long long &timeUsage, long long timeLimit, long long memoryLimit);
+    static DWORD runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage, long long &timeUsage, long long & outputUsage, long long timeLimit, long long memoryLimit);
 
     /**
      * 获取内存占用最大值
@@ -111,6 +111,14 @@ public:
      * @return 是否格式错误
      */
     static bool isPresentationError(std::string &std, std::string &out);
+
+    /**
+     * 获取输出文件大小
+     * @param runId      - 运行编号
+     * @param caseNumber - 测试样例编号
+     * @return 输出文件大小
+     */
+    static long long getOutputFileUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber);
 };
 
 

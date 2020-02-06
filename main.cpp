@@ -2,8 +2,11 @@
 // Created by zy on 2020/1/31.
 //
 #include <iostream>
+#include <io.h>
 #include "src/database/header/connect.h"
 #include "src/manager/header/manager.h"
+#include "src/judge/header/judgecore.h"
+#include "src/config.h"
 
 
 int main() {
@@ -15,6 +18,7 @@ int main() {
     manager.run();
     //关闭数据库连接
 
+//    debug(JudgeCore::getOutputFileUsage(runId, caseNumber));
 //    debug(JudgeCore::answerCompare("1","1","1"));
 
     Connect::close();

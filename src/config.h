@@ -25,6 +25,8 @@
 
 #define TIME_LIMIT_EXCEEDED_WEIGHT 10   //用户态超时权值
 
+#define OUTPUT_LIMIT  268435456     //输出大小限制
+// 100000
 #define debug(x) std::cout << x << std::endl;
 
 #endif //JUDGE_CONFIG_H
