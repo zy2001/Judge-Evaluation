@@ -65,6 +65,9 @@ void Manager::run() {
             if (getProblemDetail(judgeItem.getRid(), judgeItem.getPid(), timeLimit, memoryLimit, caseCount)) {
                 //获取题目信息成功
                 //编译源代码
+                std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(COMPILING) + " WHERE RID = " +
+                                  judgeItem.getRid();
+                Connect::mysql_update(sql);
                 int compilationResult = Compiler::compile(judgeItem.getRid(), judgeItem.getPid(),
                                                           judgeItem.getLanguage());
                 if (compilationResult != 0) {
@@ -72,6 +75,10 @@ void Manager::run() {
                     printf("Compile Error!\n");
                     resultStatus = COMPILATION_ERROR;
                 } else {
+                    //更新状态为正在运行
+                    std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(RUNNING) + " WHERE RID = " +
+                                      judgeItem.getRid();
+                    Connect::mysql_update(sql);
                     //编译成功
                     //运行源程序
                     resultStatus = JudgeCore::run(judgeItem.getRid(), judgeItem.getPid(), timeLimit, memoryLimit,
@@ -83,8 +90,12 @@ void Manager::run() {
             //更新评测结果
             std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(resultStatus) + " WHERE RID = " +
                               judgeItem.getRid();
-//            debug(sql);
             Connect::mysql_update(sql.c_str());
+            if(resultStatus == ACCEPT) {
+                sql = "UPDATE PROBLEM SET ACCEPT = ACCEPT + 1 WHERE PID = " + judgeItem.getPid();
+                Connect::mysql_update(sql.c_str());
+            }
+
             //删除目录下所有文件
             Utils::DeleteAllFiles(folderPath);
             //删除目录

@@ -51,26 +51,12 @@ public:
     static DWORD runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage, long long &timeUsage, long long & outputUsage, long long timeLimit, long long memoryLimit);
 
     /**
-     * 获取内存占用最大值
-     * @param pi          - 子进程信息结构体
-     * @param memoryLimit - 运行空间限制(KB)
-     * @return 最大内存使用量
-     */
-    static long long getMaxMemoryUsage(PROCESS_INFORMATION &pi, long long memoryLimit);
-
-    /**
      * 获取当前内存使用情况
      * @param hProcess - 进程句柄
      * @return 当前内存使用量(KB)
      */
     static long long getCurrentMemoryUsage(HANDLE &hProcess);
 
-
-    /**
-     * 获取当前系统时间.
-     * @return 当前系统时间(ms)
-     */
-    static long long getMillisecondsNow();
 
     /**
      * 强制销毁进程(当触发阈值时).
@@ -113,12 +99,13 @@ public:
     static bool isPresentationError(std::string &std, std::string &out);
 
     /**
-     * 获取输出文件大小
+     *  获取输出文件大小
+     * @param pi         - 子进程信息结构体
      * @param runId      - 运行编号
      * @param caseNumber - 测试样例编号
      * @return 输出文件大小
      */
-    static long long getOutputFileUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber);
+    static long long getOutputUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber);
 };
 
 

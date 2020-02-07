@@ -54,9 +54,6 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
         CloseHandle(si.hStdOutput);
         printf("Judge Finished!\n");
 
-//        if (exitCode == STILL_ACTIVE) {
-//            JudgeCore::killProcess(pi);
-//        }
         if (outputUsage > OUTPUT_LIMIT) {
             printf("Output Limit Exceeded!\n");
             return OUTPUT_LIMIT_EXCEEDED;
@@ -171,15 +168,10 @@ DWORD
 JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage,
                       long long &timeUsage, long long &outputUsage, long long timeLimit,
                       long long memoryLimit) {
-
-    auto memoryFeature = std::async(std::launch::async, JudgeCore::getMaxMemoryUsage, std::ref(pi), memoryLimit);
-
     //唤醒子进程
     ResumeThread(pi.hThread);
-    //等待线程运行
-//    long long reservedTime = timeLimit * 9;
-//    WaitForSingleObject(pi.hProcess, DWORD(timeLimit + reservedTime));
-//    Sleep(timeLimit + reservedTime);
+
+    //保存进程运行时间信息
     FILETIME creationTime;
     FILETIME exitTime;
     FILETIME kernelTime;
@@ -207,18 +199,25 @@ JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string ca
         long long userTimeUsage =
                 userSysTimeDiff.wMinute * 60000 + userSysTimeDiff.wSecond * 1000 + userSysTimeDiff.wMilliseconds;
 
-        printf("thread kernel exec time%d = %lld,  %lld\n", cnt, timeUsage, userTimeUsage); // 内核层运行时间
+//        printf("thread kernel exec time%d = %lld,  %lld\n", cnt++, timeUsage, userTimeUsage); // 内核层运行时间
         // 超时杀死进程
         if (timeUsage > timeLimit || userTimeUsage > timeLimit * TIME_LIMIT_EXCEEDED_WEIGHT) {
-            debug("Time Limit Exceeded: " + Utils::parseString(timeUsage) + " > " + Utils::parseString(timeLimit));
+//            debug("Time Limit Exceeded: " + Utils::parseString(timeUsage) + " > " + Utils::parseString(timeLimit));
             if (timeUsage <= timeLimit) timeUsage = timeLimit + 1;
             killProcess(pi);
             break;
         }
 
+        memoryUsage = std::max(memoryUsage, getCurrentMemoryUsage(pi.hProcess));
+//        printf("run memory usage%d = %lld\n", cnt, memoryUsage);
+        // 超内存杀死进程
+        if (memoryUsage > memoryLimit) {
+            killProcess(pi);
+            break;
+        }
 
-        outputUsage = getOutputFileUsage(pi, runId, caseNumber);
-        printf("output file size%d = %lld\n", cnt++, outputUsage);
+        outputUsage = getOutputUsage(pi, runId, caseNumber);
+//        printf("output file size%d = %lld\n", cnt++, outputUsage);
         // 输出超限杀死进程
         if (outputUsage > OUTPUT_LIMIT) {
             killProcess(pi);
@@ -226,9 +225,6 @@ JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string ca
         }
         Sleep(10);
     }
-
-    memoryUsage = memoryFeature.get();
-//    debug(getExitCode(pi.hProcess));
     return getExitCode(pi.hProcess);
 }
 
@@ -251,61 +247,13 @@ long long JudgeCore::getCurrentMemoryUsage(HANDLE &hProcess) {
 }
 
 /**
- * 获取应用程序退出代码.
- * 0表示正常退出, 259表示仍在运行.
- * @param  hProcess - 进程的句柄
- * @return 退出代码
+ *  获取输出文件大小
+ * @param pi         - 子进程信息结构体
+ * @param runId      - 运行编号
+ * @param caseNumber - 测试样例编号
+ * @return 输出文件大小
  */
-DWORD JudgeCore::getExitCode(HANDLE &hProcess) {
-    DWORD exitCode = 0;
-    GetExitCodeProcess(hProcess, &exitCode);
-    return exitCode;
-}
-
-/**
- * 获取内存占用最大值
- * @param pi          - 子进程信息结构体
- * @param memoryLimit - 运行空间限制(KB)
- * @return 最大内存使用量
- */
-long long JudgeCore::getMaxMemoryUsage(PROCESS_INFORMATION &pi, long long memoryLimit) {
-    long long maxMemoryUsage = 0, currentMemoryUsage = 0;
-    do {
-        currentMemoryUsage = getCurrentMemoryUsage(pi.hProcess);
-        if (currentMemoryUsage > maxMemoryUsage) {
-            maxMemoryUsage = currentMemoryUsage;
-        }
-        if (currentMemoryUsage > memoryLimit) {
-            killProcess(pi);
-        }
-        Sleep(10);
-    } while (getExitCode(pi.hProcess) == STILL_ACTIVE);
-    return maxMemoryUsage;
-}
-
-/**
- * 获取当前系统时间.
- * @return 当前系统时间(ms)
- */
-long long JudgeCore::getMillisecondsNow() {
-    static LARGE_INTEGER frequency;
-    static BOOL useQpf = QueryPerformanceFrequency(&frequency);
-    if (useQpf) {
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
-        return (1000LL * now.QuadPart) / frequency.QuadPart;
-    } else {
-        return GetTickCount();
-    }
-}
-
-/**
- * 获取内存占用最大值
- * @param pi          - 子进程信息结构体
- * @param memoryLimit - 运行空间限制(KB)
- * @return 最大内存使用量
- */
-long long JudgeCore::getOutputFileUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber) {
+long long JudgeCore::getOutputUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber) {
     long long currentOutputFileUsage = -1;
     std::string path = "../data/" + runId + "/" + caseNumber + ".out";
     HANDLE hFile = CreateFile(reinterpret_cast<LPCSTR>(path.c_str()), 0, FILE_SHARE_WRITE, NULL,
@@ -319,6 +267,17 @@ long long JudgeCore::getOutputFileUsage(PROCESS_INFORMATION &pi, std::string &ru
     return currentOutputFileUsage;
 }
 
+/**
+ * 获取应用程序退出代码.
+ * 0表示正常退出, 259表示仍在运行.
+ * @param  hProcess - 进程的句柄
+ * @return 退出代码
+ */
+DWORD JudgeCore::getExitCode(HANDLE &hProcess) {
+    DWORD exitCode = 0;
+    GetExitCodeProcess(hProcess, &exitCode);
+    return exitCode;
+}
 
 /**
  * 强制销毁进程(当触发阈值时).
