@@ -145,12 +145,13 @@ bool JudgeCore::setUpIORedirection(STARTUPINFO &si, std::string runId, std::stri
  * @param runid - 运行编号
  */
 bool JudgeCore::createProcess(STARTUPINFO &si, PROCESS_INFORMATION &pi, std::string runId) {
-    //设置为无窗口显示并等待唤醒
-    DWORD flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
+
+    //设置进程等待唤醒
+    DWORD flags = CREATE_SUSPENDED;
     std::string cmd = "../data/" + runId + "/main.exe";
     std::cout << cmd << std::endl;
     //char cmdd[] = "D:\\JudgeClient\\Data\\" + runid + "main.exe";
-    bool ret = CreateProcess(nullptr, (LPSTR) cmd.c_str(), nullptr, nullptr, TRUE,
+    bool ret = CreateProcess(nullptr, (LPSTR) cmd.c_str(), nullptr, nullptr, FALSE,
                              flags, nullptr, nullptr, &si, &pi);
     return ret;
 }

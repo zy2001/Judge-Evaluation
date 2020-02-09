@@ -31,21 +31,35 @@ int Utils::parseInt(char *str) {
 }
 
 std::string Utils::parseString(int val) {
+    if (val == 0) { return "0"; }
+    bool flag = false;
+    if (val < 0) {
+        flag = true;
+        val *= -1;
+    }
     std::string res;
     while (val > 0) {
         res += (val % 10 + '0');
         val /= 10;
     }
+    if (flag) res += "-";
     std::reverse(res.begin(), res.end());
     return res;
 }
 
 std::string Utils::parseString(long long val) {
+    if (val == 0) { return "0"; }
+    bool flag = false;
+    if (val < 0) {
+        flag = true;
+        val *= -1;
+    }
     std::string res;
     while (val > 0) {
         res += (val % 10 + '0');
         val /= 10;
     }
+    if (flag) res += "-";
     std::reverse(res.begin(), res.end());
     return res;
 }

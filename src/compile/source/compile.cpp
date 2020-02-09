@@ -9,7 +9,7 @@
 #include "../../database/header/connect.h"
 
 int Compiler::compile(std::string runId, std::string pid, std::string language) {
-    int result = 0;
+    int result = -1;
     if ("C++" == language) {
         result = compile_cpp(runId, pid);
     }
