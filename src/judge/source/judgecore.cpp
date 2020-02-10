@@ -14,6 +14,7 @@
 #include "../../utils/header/utils.h"
 #include "../../database/header/connect.h"
 
+
 //-1系统错误
 /**
  * 运行程序，检测资源使用
@@ -29,40 +30,63 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
     long long maxTimeUsage = 0, maxMemoryUsage = 0;
     //逐个TestCase运行
     for (int caseNumber = 1; caseNumber <= caseCount; caseNumber++) {
-        PROCESS_INFORMATION pi;
         STARTUPINFO si;
-        ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
         ZeroMemory(&si, sizeof(STARTUPINFOA));
         //重载子进程IO
         if (!JudgeCore::setUpIORedirection(si, runId, pid, Utils::parseString(caseNumber))) {
             printf("Create Fail\n");
             return SYSTEM_ERROR;
         }
+        PROCESS_INFORMATION pi;
+        ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
         //创建测试进程
         if (!JudgeCore::createProcess(si, pi, runId)) {
             printf("Create Process Fail!\n");
             return SYSTEM_ERROR;
         }
+
+        HANDLE hJob = CreateJobObject(nullptr, nullptr);
+        JOBOBJECT_BASIC_LIMIT_INFORMATION basicLimit;
+        ZeroMemory(&basicLimit, sizeof(basicLimit));
+        basicLimit.ActiveProcessLimit = 1;
+        basicLimit.LimitFlags = JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+        SetInformationJobObject(hJob, JobObjectBasicLimitInformation, &basicLimit, sizeof(basicLimit));
+
+        JOBOBJECT_BASIC_UI_RESTRICTIONS jobUILimit;
+        jobUILimit.UIRestrictionsClass =
+                JOB_OBJECT_UILIMIT_DESKTOP | //阻止进程创建或切换桌面。
+                JOB_OBJECT_UILIMIT_DISPLAYSETTINGS | //进程更改显示设置。
+                JOB_OBJECT_UILIMIT_EXITWINDOWS | //阻止进程注销，关机，重启或断开系统电源
+                JOB_OBJECT_UILIMIT_GLOBALATOMS | //为作业指定其专有的全局原子表，并限定作业中的进程只能访问此作业的表。
+                JOB_OBJECT_UILIMIT_HANDLES | //阻止作业中的进程使用同一个作业外部的进程所创建的用户对象( 如HWND) 。
+                JOB_OBJECT_UILIMIT_READCLIPBOARD | //阻止进程读取剪贴板中的内容。
+                JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS | //阻止进程更改系统参数。
+                JOB_OBJECT_UILIMIT_WRITECLIPBOARD; //阻止进程清除剪贴板中的内容。
+        SetInformationJobObject(hJob, JobObjectBasicUIRestrictions, &jobUILimit, sizeof(jobUILimit));
+        AssignProcessToJobObject(hJob, pi.hProcess);
+
         long long memoryUsage = 0, timeUsage = 0, outputUsage = 0;
         printf("Judge Start!\n");
         DWORD exitCode = JudgeCore::runProcess(pi, runId, Utils::parseString(caseNumber), memoryUsage, timeUsage,
-                                               outputUsage, timeLimit, memoryLimit);
+                    outputUsage, timeLimit, memoryLimit);
+
         // 关闭进程相关句柄
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
         CloseHandle(si.hStdInput);
         CloseHandle(si.hStdOutput);
+        TerminateJobObject(hJob, 0);
+        CloseHandle(hJob);
         printf("Judge Finished!\n");
-
         if (outputUsage > OUTPUT_LIMIT) {
             printf("Output Limit Exceeded!\n");
             return OUTPUT_LIMIT_EXCEEDED;
         }
-        if (timeUsage >= timeLimit) {
+        if (exitCode == ERROR_NOT_ENOUGH_QUOTA ||timeUsage > timeLimit) {
             printf("Time Limit Exceeded!\n");
             return TIME_LIMIT_EXCEEDED;
         }
-        if (memoryUsage >= memoryLimit) {
+        if (memoryUsage > memoryLimit) {
             printf("Memory Limit Exceeded!\n");
             return MEMORY_LIMIT_EXCEEDED;
         }
@@ -145,14 +169,11 @@ bool JudgeCore::setUpIORedirection(STARTUPINFO &si, std::string runId, std::stri
  * @param runid - 运行编号
  */
 bool JudgeCore::createProcess(STARTUPINFO &si, PROCESS_INFORMATION &pi, std::string runId) {
-
-    //设置进程等待唤醒
-    DWORD flags = CREATE_SUSPENDED;
+    //设置进程无窗口并等待唤醒
     std::string cmd = "../data/" + runId + "/main.exe";
     std::cout << cmd << std::endl;
-    //char cmdd[] = "D:\\JudgeClient\\Data\\" + runid + "main.exe";
-    bool ret = CreateProcess(nullptr, (LPSTR) cmd.c_str(), nullptr, nullptr, FALSE,
-                             flags, nullptr, nullptr, &si, &pi);
+    bool ret = CreateProcess(nullptr, (LPSTR) cmd.c_str(), nullptr, nullptr, TRUE,
+                             CREATE_SUSPENDED, nullptr, nullptr, &si, &pi);
     return ret;
 }
 
@@ -171,63 +192,48 @@ JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string ca
                       long long memoryLimit) {
     //唤醒子进程
     ResumeThread(pi.hThread);
+    // 检测资源使用是否超限
+    while (getExitCode(pi.hProcess) == STILL_ACTIVE) {
+        timeUsage = getTimeUsage(pi.hThread);
+        memoryUsage = std::max(memoryUsage, getCurrentMemoryUsage(pi.hProcess));
+        outputUsage = getOutputUsage(pi, runId, caseNumber);
+        // 超时杀死进程
+        // 超内存杀死进程
+        // 输出超限杀死进程
+        if (timeUsage > timeLimit||memoryUsage > memoryLimit || outputUsage > OUTPUT_LIMIT) {
+            killProcess(pi);
+            break;
+        }
+//        printf("thread kernel exec time = %lld\n", timeUsage); // 内核层运行时间
+//        printf("run memory usage = %lld\n", memoryUsage);
+//        printf("output file size = %lld\n", outputUsage);
+        Sleep(10);
+    }
+    return getExitCode(pi.hProcess);
+}
 
+/**
+ * 获取当前时间使用情况
+ * @param hThread - 进程句柄
+ * @return 当前时间使用量(ms)
+ */
+long long JudgeCore::getTimeUsage(HANDLE &hThread) {
     //保存进程运行时间信息
     FILETIME creationTime;
     FILETIME exitTime;
     FILETIME kernelTime;
     FILETIME userTime;
-    //debug cnt
-    int cnt = 1;
-    // 检测资源使用是否超限
-    while (GetThreadTimes(pi.hThread, &creationTime, &exitTime, &kernelTime, &userTime) &&
-           getExitCode(pi.hProcess) == STILL_ACTIVE) {
+    GetThreadTimes(hThread, &creationTime, &exitTime, &kernelTime, &userTime);
 
-        // 计算内核态耗时
-        FILETIME kernelFileTimeDiff;
-        kernelFileTimeDiff.dwHighDateTime = kernelTime.dwHighDateTime;
-        kernelFileTimeDiff.dwLowDateTime = kernelTime.dwLowDateTime;
-        SYSTEMTIME kernelSysTimeDiff;
-        FileTimeToSystemTime(&kernelFileTimeDiff, &kernelSysTimeDiff);
-        timeUsage = (long long) kernelSysTimeDiff.wMinute * 60000 + kernelSysTimeDiff.wSecond * 1000 +
-                    kernelSysTimeDiff.wMilliseconds;
-        // 计算用户态耗时
-        FILETIME userFileTimeDiff;
-        userFileTimeDiff.dwHighDateTime = userTime.dwHighDateTime;
-        userFileTimeDiff.dwLowDateTime = userTime.dwLowDateTime;
-        SYSTEMTIME userSysTimeDiff;
-        FileTimeToSystemTime(&userFileTimeDiff, &userSysTimeDiff);
-        long long userTimeUsage =
-                userSysTimeDiff.wMinute * 60000 + userSysTimeDiff.wSecond * 1000 + userSysTimeDiff.wMilliseconds;
-
-//        printf("thread kernel exec time%d = %lld,  %lld\n", cnt++, timeUsage, userTimeUsage); // 内核层运行时间
-        // 超时杀死进程
-        if (timeUsage > timeLimit || userTimeUsage > timeLimit * TIME_LIMIT_EXCEEDED_WEIGHT) {
-//            debug("Time Limit Exceeded: " + Utils::parseString(timeUsage) + " > " + Utils::parseString(timeLimit));
-            if (timeUsage <= timeLimit) timeUsage = timeLimit + 1;
-            killProcess(pi);
-            break;
-        }
-
-        memoryUsage = std::max(memoryUsage, getCurrentMemoryUsage(pi.hProcess));
-//        printf("run memory usage%d = %lld\n", cnt, memoryUsage);
-        // 超内存杀死进程
-        if (memoryUsage > memoryLimit) {
-            killProcess(pi);
-            break;
-        }
-
-        outputUsage = getOutputUsage(pi, runId, caseNumber);
-//        printf("output file size%d = %lld\n", cnt++, outputUsage);
-        // 输出超限杀死进程
-        if (outputUsage > OUTPUT_LIMIT) {
-            killProcess(pi);
-            break;
-        }
-        Sleep(10);
-    }
-    return getExitCode(pi.hProcess);
+    // 计算用户态耗时
+    FILETIME userFileTimeDiff;
+    userFileTimeDiff.dwHighDateTime = userTime.dwHighDateTime;
+    userFileTimeDiff.dwLowDateTime = userTime.dwLowDateTime;
+    SYSTEMTIME userSysTimeDiff;
+    FileTimeToSystemTime(&userFileTimeDiff, &userSysTimeDiff);
+    return userSysTimeDiff.wMinute * 60000 + userSysTimeDiff.wSecond * 1000 + userSysTimeDiff.wMilliseconds;
 }
+
 
 /**
  * 获取当前内存使用情况
@@ -331,9 +337,12 @@ int JudgeCore::answerCompare(std::string runId, std::string pid, std::string cas
     //忽略结尾换行符
     std = Utils::ignoreLineEnd(std);
     //读程序输出
+    Sleep(100);
     std::string out = Utils::readFile("../data/" + runId + "/" + caseId + ".out");
     //忽略结尾换行符
     out = Utils::ignoreLineEnd(out);
+//    debug(std);
+//    debug(out);
     //判别ACCEPT
     if (JudgeCore::isAccept(std, out)) {
         return ACCEPT;

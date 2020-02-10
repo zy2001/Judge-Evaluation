@@ -48,7 +48,9 @@ public:
      * @param memoryLimit - 运行空间限制(KB)
      * @return 进程退出代码
      */
-    static DWORD runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage, long long &timeUsage, long long & outputUsage, long long timeLimit, long long memoryLimit);
+    static DWORD runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage,
+                            long long &timeUsage, long long &outputUsage, long long timeLimit,
+                            long long memoryLimit);
 
     /**
      * 获取当前内存使用情况
@@ -106,6 +108,13 @@ public:
      * @return 输出文件大小
      */
     static long long getOutputUsage(PROCESS_INFORMATION &pi, std::string &runId, std::string &caseNumber);
+
+    /**
+     * 获取当前时间使用情况
+     * @param hThread - 进程句柄
+     * @return 当前时间使用量(ms)
+     */
+    static long long int getTimeUsage(HANDLE &hThread);
 };
 
 

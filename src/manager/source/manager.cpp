@@ -46,60 +46,12 @@ void Manager::run() {
     signal(SIGINT, handle);
     while (flag) {
         getItems();
-        while (this->ItemsQueue.size()) {
+        while (!this->ItemsQueue.empty()) {
             //取被测数据
             JudgeItem judgeItem = this->ItemsQueue.front();
             this->ItemsQueue.pop();
-            //创建测试文件夹及源程序文件
-            std::string folderPath = "../data/" + judgeItem.getRid();
-            bool create = CreateDirectory(folderPath.c_str(), 0);
-            std::ofstream file;
-            //以写入和在文件末尾添加的方式打开.cpp文件，没有的话就创建该文件。
-            file.open("../data/" + judgeItem.getRid() + "/main.cpp", std::ios::out | std::ios::app);
-            if (file.is_open()) {
-                file << judgeItem.getCode();
-            }
-            file.close();
-            int resultStatus = SYSTEM_ERROR;      //评测结果代码
-            int timeLimit = 0, memoryLimit = 0, caseCount = 0;
-            if (getProblemDetail(judgeItem.getRid(), judgeItem.getPid(), timeLimit, memoryLimit, caseCount)) {
-                //获取题目信息成功
-                //编译源代码
-                std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(COMPILING) + " WHERE RID = " +
-                                  judgeItem.getRid();
-                Connect::mysql_update(sql);
-                int compilationResult = Compiler::compile(judgeItem.getRid(), judgeItem.getPid(),
-                                                          judgeItem.getLanguage());
-                if (compilationResult != 0) {
-                    //编译错误
-                    printf("Compile Error!\n");
-                    resultStatus = COMPILATION_ERROR;
-                } else {
-                    //更新状态为正在运行
-                    std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(RUNNING) + " WHERE RID = " +
-                                      judgeItem.getRid();
-                    Connect::mysql_update(sql);
-                    //编译成功
-                    //运行源程序
-                    resultStatus = JudgeCore::run(judgeItem.getRid(), judgeItem.getPid(), timeLimit, memoryLimit,
-                                                  caseCount);
-                    std::cout << "Judge Finished!" << this->ItemsQueue.size() << std::endl;
-                }
-            }
-            debug(resultStatus);
-            //更新评测结果
-            std::string sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(resultStatus) + " WHERE RID = " +
-                              judgeItem.getRid();
-            Connect::mysql_update(sql.c_str());
-            if(resultStatus == ACCEPT) {
-                sql = "UPDATE PROBLEM SET ACCEPT = ACCEPT + 1 WHERE PID = " + judgeItem.getPid();
-                Connect::mysql_update(sql.c_str());
-            }
+            judge(judgeItem);
 
-            //删除目录下所有文件
-            Utils::DeleteAllFiles(folderPath);
-            //删除目录
-            RemoveDirectory(folderPath.c_str());
         }
     }
 }
@@ -129,4 +81,59 @@ bool Manager::getProblemDetail(const std::string &runId, const std::string &pid,
     std::cout << "timeLimit:" << timeLimit << "\nmemoryLimit:" << memoryLimit << "\ncaseCount:" << caseCount
               << std::endl;
     return true;
+}
+
+
+void Manager::judge(JudgeItem &judgeItem) {
+    //创建测试文件夹及源程序文件
+    std::string folderPath = "../data/" + judgeItem.getRid();
+    std::string sql;
+    bool create = CreateDirectory(folderPath.c_str(), nullptr);
+    std::ofstream file;
+    //以写入和在文件末尾添加的方式打开.cpp文件，没有的话就创建该文件。
+    file.open("../data/" + judgeItem.getRid() + "/main.cpp", std::ios::out | std::ios::app);
+    if (file.is_open()) {
+        file << judgeItem.getCode();
+    }
+    file.close();
+    int resultStatus = SYSTEM_ERROR;      //评测结果代码
+    int timeLimit = 0, memoryLimit = 0, caseCount = 0;
+    if (getProblemDetail(judgeItem.getRid(), judgeItem.getPid(), timeLimit, memoryLimit, caseCount)) {
+        //获取题目信息成功
+        //编译源代码
+        sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(COMPILING) + " WHERE RID = " +
+              judgeItem.getRid();
+        Connect::mysql_update(sql);
+        int compilationResult = Compiler::compile(judgeItem.getRid(), judgeItem.getPid(),
+                                                  judgeItem.getLanguage());
+        if (compilationResult != 0) {
+            //编译错误
+            printf("Compile Error!\n");
+            resultStatus = COMPILATION_ERROR;
+        } else {
+            //更新状态为正在运行
+            sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(RUNNING) + " WHERE RID = " +
+                  judgeItem.getRid();
+            Connect::mysql_update(sql);
+            //编译成功
+            //运行源程序
+            resultStatus = JudgeCore::run(judgeItem.getRid(), judgeItem.getPid(), timeLimit, memoryLimit,
+                                          caseCount);
+            std::cout << "Judge Finished!" << this->ItemsQueue.size() << std::endl;
+        }
+    }
+    debug(resultStatus);
+    //更新评测结果
+    sql = "UPDATE SUBMIT SET STATUS = " + Utils::parseString(resultStatus) + " WHERE RID = " +
+          judgeItem.getRid();
+    Connect::mysql_update(sql.c_str());
+    if (resultStatus == ACCEPT) {
+        sql = "UPDATE PROBLEM SET ACCEPT = ACCEPT + 1 WHERE PID = " + judgeItem.getPid();
+        Connect::mysql_update(sql.c_str());
+    }
+
+    //删除目录下所有文件
+    Utils::DeleteAllFiles(folderPath);
+    //删除目录
+    RemoveDirectory(folderPath.c_str());
 }

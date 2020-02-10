@@ -84,6 +84,7 @@ std::string Utils::readFile(std::string path) {
     std::ostringstream tmp;
     tmp << file.rdbuf();
     std::string str = tmp.str();
+    file.close();
     return str;
 }
 

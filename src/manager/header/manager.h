@@ -77,6 +77,7 @@ public:
      */
     bool getProblemDetail(const std::string &runId, const std::string &pid,  int &timeLimit,  int &memoryLimit, int &caseCount);
 
+    void judge(JudgeItem &judgeItem);
 };
 
 
