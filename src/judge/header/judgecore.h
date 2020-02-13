@@ -7,6 +7,7 @@
 
 #include <string>
 #include <windows.h>
+#include "../../manager/header/manager.h"
 
 class JudgeCore{
 public:
@@ -20,7 +21,7 @@ public:
      * @param caseCount     -测试样例数目
      * @return 运行结果编码
      */
-    static int run(const std::string &runId, const std::string &pid, int timeLimit, int memoryLimit, int caseCount);
+    static int run(JudgeItem &judgeItem, JudgeStatus &judgeStatus);
 
     /**
      * 重定向子进程IO

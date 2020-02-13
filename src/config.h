@@ -10,7 +10,7 @@
 
 #define SYSTEM_ERROR -1                 //系统错误
 #define WAITING 0                       //等待
-#define QUEUE 1	                        //队列中
+#define QUEUEING 1	                        //队列中
 #define COMPILING 2	                    //编译中
 #define COMPILATION_ERROR  3	        //编译错误
 #define RUNNING 4	                    //运行中
@@ -22,10 +22,9 @@
 #define PRESENTATION_ERROR 10	        //格式错误
 #define ACCEPT  11	                    //答案正确
 
-#define TIME_LIMIT_EXCEEDED_WEIGHT 20   //用户态超时权值
 
 #define OUTPUT_LIMIT  268435456     //输出大小限制
-// 100000
+
 #define debug(x) std::cout << x << std::endl;
 
 #endif //JUDGE_CONFIG_H

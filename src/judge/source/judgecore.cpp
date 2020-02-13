@@ -3,7 +3,6 @@
 //
 
 #include <cstdio>
-#include <future>
 #include <iostream>
 #include <windows.h>
 #include <fcntl.h>
@@ -12,7 +11,6 @@
 #include "../../config.h"
 #include "../header/judgecore.h"
 #include "../../utils/header/utils.h"
-#include "../../database/header/connect.h"
 
 
 //-1系统错误
@@ -25,26 +23,26 @@
  * @param caseCount     -测试样例数目
  * @return 运行结果编码
  */
-int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLimit, int memoryLimit, int caseCount) {
-    //最长运行时间，最大使用内存
+int JudgeCore::run(JudgeItem &judgeItem, JudgeStatus &judgeStatus) {
+    // 最长运行时间，最大使用内存
     long long maxTimeUsage = 0, maxMemoryUsage = 0;
-    //逐个TestCase运行
-    for (int caseNumber = 1; caseNumber <= caseCount; caseNumber++) {
+    // 逐个TestCase运行
+    for (int caseNumber = 1; caseNumber <= judgeItem.getCaseCount(); caseNumber++) {
         STARTUPINFO si;
         ZeroMemory(&si, sizeof(STARTUPINFOA));
-        //重载子进程IO
-        if (!JudgeCore::setUpIORedirection(si, runId, pid, Utils::parseString(caseNumber))) {
+        // 重载子进程IO
+        if (!JudgeCore::setUpIORedirection(si, judgeItem.getRid(), judgeItem.getPid(),
+                                           Utils::parseString(caseNumber))) {
             printf("Create Fail\n");
             return SYSTEM_ERROR;
         }
         PROCESS_INFORMATION pi;
         ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
-        //创建测试进程
-        if (!JudgeCore::createProcess(si, pi, runId)) {
+        // 创建测试进程
+        if (!JudgeCore::createProcess(si, pi, judgeItem.getRid())) {
             printf("Create Process Fail!\n");
             return SYSTEM_ERROR;
         }
-
         HANDLE hJob = CreateJobObject(nullptr, nullptr);
         JOBOBJECT_BASIC_LIMIT_INFORMATION basicLimit;
         ZeroMemory(&basicLimit, sizeof(basicLimit));
@@ -54,22 +52,22 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
 
         JOBOBJECT_BASIC_UI_RESTRICTIONS jobUILimit;
         jobUILimit.UIRestrictionsClass =
-                JOB_OBJECT_UILIMIT_DESKTOP | //阻止进程创建或切换桌面。
-                JOB_OBJECT_UILIMIT_DISPLAYSETTINGS | //进程更改显示设置。
-                JOB_OBJECT_UILIMIT_EXITWINDOWS | //阻止进程注销，关机，重启或断开系统电源
-                JOB_OBJECT_UILIMIT_GLOBALATOMS | //为作业指定其专有的全局原子表，并限定作业中的进程只能访问此作业的表。
-                JOB_OBJECT_UILIMIT_HANDLES | //阻止作业中的进程使用同一个作业外部的进程所创建的用户对象( 如HWND) 。
-                JOB_OBJECT_UILIMIT_READCLIPBOARD | //阻止进程读取剪贴板中的内容。
-                JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS | //阻止进程更改系统参数。
-                JOB_OBJECT_UILIMIT_WRITECLIPBOARD; //阻止进程清除剪贴板中的内容。
+                JOB_OBJECT_UILIMIT_DESKTOP |            // 阻止进程创建或切换桌面。
+                JOB_OBJECT_UILIMIT_DISPLAYSETTINGS |    // 进程更改显示设置。
+                JOB_OBJECT_UILIMIT_EXITWINDOWS |        // 阻止进程注销，关机，重启或断开系统电源
+                JOB_OBJECT_UILIMIT_GLOBALATOMS |        // 为作业指定其专有的全局原子表，并限定作业中的进程只能访问此作业的表。
+                JOB_OBJECT_UILIMIT_HANDLES |            // 阻止作业中的进程使用同一个作业外部的进程所创建的用户对象( 如HWND) 。
+                JOB_OBJECT_UILIMIT_READCLIPBOARD |      // 阻止进程读取剪贴板中的内容。
+                JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS |   // 阻止进程更改系统参数。
+                JOB_OBJECT_UILIMIT_WRITECLIPBOARD;      // 阻止进程清除剪贴板中的内容。
         SetInformationJobObject(hJob, JobObjectBasicUIRestrictions, &jobUILimit, sizeof(jobUILimit));
         AssignProcessToJobObject(hJob, pi.hProcess);
 
         long long memoryUsage = 0, timeUsage = 0, outputUsage = 0;
         printf("Judge Start!\n");
-        DWORD exitCode = JudgeCore::runProcess(pi, runId, Utils::parseString(caseNumber), memoryUsage, timeUsage,
-                    outputUsage, timeLimit, memoryLimit);
-
+        DWORD exitCode = JudgeCore::runProcess(pi, judgeItem.getRid(), Utils::parseString(caseNumber), memoryUsage,
+                                               timeUsage,
+                                               outputUsage, judgeItem.getTimeLimit(), judgeItem.getMemoryLimit());
         // 关闭进程相关句柄
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
@@ -82,11 +80,11 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
             printf("Output Limit Exceeded!\n");
             return OUTPUT_LIMIT_EXCEEDED;
         }
-        if (exitCode == ERROR_NOT_ENOUGH_QUOTA ||timeUsage > timeLimit) {
+        if (exitCode == ERROR_NOT_ENOUGH_QUOTA || timeUsage > judgeItem.getTimeLimit()) {
             printf("Time Limit Exceeded!\n");
             return TIME_LIMIT_EXCEEDED;
         }
-        if (memoryUsage > memoryLimit) {
+        if (memoryUsage > judgeItem.getMemoryLimit()) {
             printf("Memory Limit Exceeded!\n");
             return MEMORY_LIMIT_EXCEEDED;
         }
@@ -97,22 +95,19 @@ int JudgeCore::run(const std::string &runId, const std::string &pid, int timeLim
         printf("Memory:%lldKB Time:%lldms\n", memoryUsage, timeUsage);
         maxTimeUsage = std::max(timeUsage, maxTimeUsage);
         maxMemoryUsage = std::max(memoryUsage, maxMemoryUsage);
-
-        //校验结果
-        int result = answerCompare(runId, pid, Utils::parseString(caseNumber));
-
+        // 校验结果
+        int result = answerCompare(judgeItem.getRid(), judgeItem.getPid(), Utils::parseString(caseNumber));
         if (ACCEPT != result) {
-            //答案不正确
+            // 答案不正确
             return result;
         }
     }
-
-    //答案正确更新runTime, runMemory
-    std::string sql = "UPDATE SUBMIT SET RUN_TIME = " + Utils::parseString(maxTimeUsage) + " , RUN_MEMORY = " +
-                      Utils::parseString(maxMemoryUsage) + " WHERE RID = " + runId;
-    Connect::mysql_update(sql.c_str());
+    // 答案正确更新runTime, runMemory
+    judgeStatus.setRunTime(maxTimeUsage);
+    judgeStatus.setRunMemory(maxMemoryUsage);
     return ACCEPT;
 }
+
 
 /**
  * 重定向子进程IO
@@ -126,7 +121,7 @@ bool JudgeCore::setUpIORedirection(STARTUPINFO &si, std::string runId, std::stri
     sa.nLength = sizeof(sa);
     sa.lpSecurityDescriptor = NULL;
     sa.bInheritHandle = TRUE;
-    //子进程stdin重定向
+    // 子进程stdin重定向
     std::string path = "../testcase/" + pid + "/" + caseNum + ".in";
     std::cout << "inpath" << path << std::endl;
     HANDLE hFileRead = CreateFile(path.c_str(),
@@ -140,7 +135,7 @@ bool JudgeCore::setUpIORedirection(STARTUPINFO &si, std::string runId, std::stri
         printf("Open InPutFile Fail!\n");
         return false;
     }
-    //子进程stdout重定向
+    // 子进程stdout重定向
     path = "../data/" + runId + "/" + caseNum + ".out";
     std::cout << "outpath" << path << std::endl;
     HANDLE hFileWrite = CreateFile(path.c_str(),
@@ -169,7 +164,7 @@ bool JudgeCore::setUpIORedirection(STARTUPINFO &si, std::string runId, std::stri
  * @param runid - 运行编号
  */
 bool JudgeCore::createProcess(STARTUPINFO &si, PROCESS_INFORMATION &pi, std::string runId) {
-    //设置进程无窗口并等待唤醒
+    // 设置进程无窗口并等待唤醒
     std::string cmd = "../data/" + runId + "/main.exe";
     std::cout << cmd << std::endl;
     bool ret = CreateProcess(nullptr, (LPSTR) cmd.c_str(), nullptr, nullptr, TRUE,
@@ -190,7 +185,7 @@ DWORD
 JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string caseNumber, long long &memoryUsage,
                       long long &timeUsage, long long &outputUsage, long long timeLimit,
                       long long memoryLimit) {
-    //唤醒子进程
+    // 唤醒子进程
     ResumeThread(pi.hThread);
     // 检测资源使用是否超限
     while (getExitCode(pi.hProcess) == STILL_ACTIVE) {
@@ -200,7 +195,7 @@ JudgeCore::runProcess(PROCESS_INFORMATION &pi, std::string runId, std::string ca
         // 超时杀死进程
         // 超内存杀死进程
         // 输出超限杀死进程
-        if (timeUsage > timeLimit||memoryUsage > memoryLimit || outputUsage > OUTPUT_LIMIT) {
+        if (timeUsage > timeLimit || memoryUsage > memoryLimit || outputUsage > OUTPUT_LIMIT) {
             killProcess(pi);
             break;
         }
@@ -397,3 +392,4 @@ bool JudgeCore::isPresentationError(std::string &std, std::string &out) {
     }
     return false;
 }
+

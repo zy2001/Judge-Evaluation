@@ -1,0 +1,1 @@
+{"timeLimit":1000,"code":"#include<bits/stdc++.h>\nusing namespace std;\n\nint main(\")\n{\n\twhile(1){}\nreturn 0;\n}","pid":1,"language":"C++","memoryLimit":65536,"rid":19,"caseCount":2}

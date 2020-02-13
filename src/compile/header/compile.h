@@ -5,15 +5,18 @@
 #ifndef JUDGE_COMPILE_H
 #define JUDGE_COMPILE_H
 #include <string>
+#include "../../manager/header/manager.h"
 
 class Compiler
 {
 public:
     static int compile(std::string runId, std::string pid, std::string language);
 
+    static int compile(JudgeItem &judgeItem, JudgeStatus &judgeStatus);
+
     static int compile_cpp(std::string runId, std::string pid);
 
-    static bool saveCompilationMessage(std::string runId);
+//    static bool saveCompilationMessage(std::string runId);
 };
 
 

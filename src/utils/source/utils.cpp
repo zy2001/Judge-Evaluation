@@ -7,7 +7,12 @@
 #include <sstream>
 #include <algorithm>
 #include <fileapi.h>
+#include <document.h>
+#include <stringbuffer.h>
+#include <writer.h>
+#include <iostream>
 #include "../header/utils.h"
+
 
 int Utils::parseInt(std::string str) {
     if (str.length() > 9) throw -1;
@@ -95,6 +100,75 @@ std::string &Utils::ignoreLineEnd(std::string &str) {
     }
 //    debug(str);
     return str.erase(cut + 1, str.length());
+}
+
+
+JudgeItem Utils::parseJudgeItem(char *str) {
+    JudgeItem judgeItem;
+    rapidjson::Document document;
+    if (!document.Parse(str).HasParseError()) {
+        if (document.HasMember("rid") && document["rid"].IsInt()) {
+            judgeItem.setRid(parseString(document["rid"].GetInt()));
+        }
+        if (document.HasMember("pid") && document["pid"].IsInt()) {
+            judgeItem.setPid(parseString(document["pid"].GetInt()));
+        }
+        if (document.HasMember("language") && document["language"].IsString()) {
+            judgeItem.setLanguage(document["language"].GetString());
+        }
+        if (document.HasMember("code") && document["code"].IsString()) {
+            judgeItem.setCode(document["code"].GetString());
+        }
+        if (document.HasMember("timeLimit") && document["rid"].IsInt()) {
+            judgeItem.setTimeLimit(document["timeLimit"].GetInt());
+        }
+        if (document.HasMember("memoryLimit") && document["rid"].IsInt()) {
+            judgeItem.setMemoryLimit(document["memoryLimit"].GetInt());
+        }
+        if (document.HasMember("caseCount") && document["rid"].IsInt()) {
+            judgeItem.setCaseCount(document["caseCount"].GetInt());
+        }
+        judgeItem.setStatus(1);
+    }
+    return judgeItem;
+}
+
+std::string Utils::parseJSON(JudgeStatus &judgeStatus) {
+    using namespace rapidjson;
+
+    Document document;
+    document.SetObject();
+    Document::AllocatorType &allocator = document.GetAllocator();
+    //null值
+    Value null(kNullType);
+    null.SetNull();
+    //根Object
+    Value root(kObjectType);
+    //rid
+    root.AddMember("rid", judgeStatus.getRid(), allocator);
+    //status
+    root.AddMember("status", judgeStatus.getStatus(), allocator);
+    //runTime
+    if (judgeStatus.getRunTime() != -1) {
+        root.AddMember("runTime", judgeStatus.getRunTime(), allocator);
+    } else {
+        root.AddMember("runTime", null, allocator);
+    }
+    //runMemory
+    if (judgeStatus.getRunMemory() != -1) {
+        root.AddMember("runMemory", judgeStatus.getRunMemory(), allocator);
+    } else {
+        root.AddMember("runMemory", null, allocator);
+    }
+    //compilationMessage
+    Value compilationMessage(kStringType);
+    compilationMessage.SetString(judgeStatus.getCompilationMessage().c_str(),
+                                 judgeStatus.getCompilationMessage().size(), allocator);
+    root.AddMember("compilationMessage", compilationMessage, allocator);
+    StringBuffer strBuf;
+    Writer<StringBuffer> writer(strBuf);
+    root.Accept(writer);
+    return strBuf.GetString();
 }
 
 

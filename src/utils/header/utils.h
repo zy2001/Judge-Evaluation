@@ -6,6 +6,7 @@
 #define JUDGE_UTILS_H
 
 #include <string>
+#include "../../manager/header/manager.h"
 
 class Utils
 {
@@ -58,6 +59,10 @@ public:
      * @return 忽略换行符后的字符串
      */
     static std::string& ignoreLineEnd(std::string &str);
+
+    static JudgeItem parseJudgeItem(char *str);
+
+    static std::string parseJSON(JudgeStatus &judgeStatus);
 };
 
 #endif //JUDGE_UTILS_H
