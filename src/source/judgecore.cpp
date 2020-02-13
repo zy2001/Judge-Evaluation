@@ -8,9 +8,9 @@
 #include <fcntl.h>
 #include <psapi.h>
 #include <tlhelp32.h>
-#include "../../config.h"
+#include "../config.h"
+#include "../header/utils.h"
 #include "../header/judgecore.h"
-#include "../../utils/header/utils.h"
 
 
 //-1系统错误

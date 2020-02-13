@@ -5,12 +5,12 @@
 #include <io.h>
 #include <fstream>
 #include <sstream>
+#include <writer.h>
+#include <iostream>
 #include <algorithm>
 #include <fileapi.h>
 #include <document.h>
 #include <stringbuffer.h>
-#include <writer.h>
-#include <iostream>
 #include "../header/utils.h"
 
 

@@ -6,10 +6,9 @@
 #define JUDGE_UTILS_H
 
 #include <string>
-#include "../../manager/header/manager.h"
+#include "manager.h"
 
-class Utils
-{
+class Utils {
 public:
 
     /**
@@ -24,7 +23,7 @@ public:
      * @param str - c字符串
      * @return c字符串的int形式
      */
-    static int parseInt(char* str);
+    static int parseInt(char *str);
 
     /**
      * int类型转字符串型
@@ -58,11 +57,12 @@ public:
      * @param str   - 源字符串
      * @return 忽略换行符后的字符串
      */
-    static std::string& ignoreLineEnd(std::string &str);
+    static std::string &ignoreLineEnd(std::string &str);
 
     static JudgeItem parseJudgeItem(char *str);
 
     static std::string parseJSON(JudgeStatus &judgeStatus);
 };
+
 
 #endif //JUDGE_UTILS_H

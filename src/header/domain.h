@@ -1,13 +1,12 @@
 //
-// Created by zy on 2020/2/1.
+// Created by zy on 2020/2/13.
 //
 
-#ifndef JUDGE_MANAGER_H
-#define JUDGE_MANAGER_H
+#ifndef JUDGE_DOMAIN_H
+#define JUDGE_DOMAIN_H
 
 #include <string>
-#include <mysql.h>
-#include <queue>
+
 
 class JudgeItem {
 private:
@@ -23,6 +22,7 @@ public:
     JudgeItem() {
         this->rid = "-1";
     }
+
     std::string getRid() {
         return this->rid;
     }
@@ -109,6 +109,7 @@ public:
         this->runMemory = -1;
         this->compilationMessage = "";
     }
+
     int getRid() {
         return this->rid;
     }
@@ -150,20 +151,4 @@ public:
     }
 };
 
-class Manager {
-private:
-    std::queue<JudgeItem> ItemsQueue;
-public:
-
-    void run();
-
-
-    void judge(JudgeItem &judgeItem);
-
-
-    JudgeItem getJudgeItem();
-
-};
-
-
-#endif //JUDGE_MANAGER_H
+#endif //JUDGE_DOMAIN_H

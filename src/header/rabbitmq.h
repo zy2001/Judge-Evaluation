@@ -5,8 +5,8 @@
 #ifndef JUDGE_RABBITMQ_H
 #define JUDGE_RABBITMQ_H
 
-#include <amqp.h>
 #include <queue>
+#include <amqp.h>
 
 class RabbitMQ {
 private:
@@ -23,8 +23,5 @@ public:
     static bool close();
 };
 
-
-
-//bool rabbitmq_send
 
 #endif //JUDGE_RABBITMQ_H

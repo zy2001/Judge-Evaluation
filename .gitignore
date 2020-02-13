@@ -1,10 +1,11 @@
 HELP.md
 
+dll/
 data/
 datas/
 lib/
 testcase/
-dll/
+src/config.h
 !**/src/**
 
 ### Clion ###

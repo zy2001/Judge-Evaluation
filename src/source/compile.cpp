@@ -5,7 +5,7 @@
 #include <string>
 #include <iostream>
 #include "../header/compile.h"
-#include "../../utils/header/utils.h"
+#include "../header/utils.h"
 
 
 int Compiler::compile_cpp(std::string runId, std::string pid) {

@@ -7,9 +7,10 @@
 
 #include <string>
 #include <windows.h>
-#include "../../manager/header/manager.h"
+#include "domain.h"
+#include "manager.h"
 
-class JudgeCore{
+class JudgeCore {
 public:
 
     /**
@@ -117,7 +118,6 @@ public:
      */
     static long long int getTimeUsage(HANDLE &hThread);
 };
-
 
 
 #endif //JUDGE_JUDGECORE_H

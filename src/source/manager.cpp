@@ -6,12 +6,13 @@
 #include <fstream>
 #include <iostream>
 #include <windows.h>
-#include "../../config.h"
+#include "../config.h"
 #include "../header/manager.h"
-#include "../../utils/header/utils.h"
-#include "../../judge/header/judgecore.h"
-#include "../../compile/header/compile.h"
-#include "../../database/header/rabbitmq.h"
+#include "../header/utils.h"
+#include "../header/judgecore.h"
+#include "../header/compile.h"
+#include "../header/rabbitmq.h"
+
 
 bool flag = true;
 

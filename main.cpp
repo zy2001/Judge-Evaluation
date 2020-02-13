@@ -2,8 +2,8 @@
 // Created by zy on 2020/1/31.
 //
 
-#include "src/manager/header/manager.h"
-#include "src/database/header/rabbitmq.h"
+#include "src/header/manager.h"
+#include "src/header/rabbitmq.h"
 
 using namespace std;
 
