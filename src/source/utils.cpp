@@ -110,8 +110,8 @@ JudgeItem Utils::parseJudgeItem(char *str) {
         if (document.HasMember("rid") && document["rid"].IsInt()) {
             judgeItem.setRid(parseString(document["rid"].GetInt()));
         }
-        if (document.HasMember("pid") && document["pid"].IsInt()) {
-            judgeItem.setPid(parseString(document["pid"].GetInt()));
+        if (document.HasMember("pid") && document["pid"].IsString()) {
+            judgeItem.setPid(document["pid"].GetString());
         }
         if (document.HasMember("language") && document["language"].IsString()) {
             judgeItem.setLanguage(document["language"].GetString());
@@ -133,7 +133,7 @@ JudgeItem Utils::parseJudgeItem(char *str) {
     return judgeItem;
 }
 
-std::string Utils::parseJSON(JudgeStatus &judgeStatus) {
+std::string Utils::parseJSON(JudgeStatus &judgeStatus, JudgeItem &judgeItem) {
     using namespace rapidjson;
 
     Document document;
@@ -146,6 +146,8 @@ std::string Utils::parseJSON(JudgeStatus &judgeStatus) {
     Value root(kObjectType);
     //rid
     root.AddMember("rid", judgeStatus.getRid(), allocator);
+    //pid
+    root.AddMember("pid", Utils::parseInt(judgeItem.getPid()), allocator);
     //status
     root.AddMember("status", judgeStatus.getStatus(), allocator);
     //runTime

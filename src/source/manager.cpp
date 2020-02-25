@@ -35,7 +35,7 @@ void Manager::run() {
 void Manager::judge(JudgeItem &judgeItem) {
     // 更新状态为队列中
     JudgeStatus judgeStatus(Utils::parseInt(judgeItem.getRid()), QUEUEING);
-    RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus));
+    RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus, judgeItem));
     // 创建测试文件夹
     std::string folderPath = "../data/" + judgeItem.getRid();
     bool create = CreateDirectory(folderPath.c_str(), nullptr);
@@ -50,7 +50,7 @@ void Manager::judge(JudgeItem &judgeItem) {
     int resultStatus = SYSTEM_ERROR;      // 评测结果代码
     // 编译源代码
     judgeStatus.setStatus(COMPILING);
-    RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus));
+    RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus, judgeItem));
     int compilationResult = Compiler::compile(judgeItem, judgeStatus);
     if (compilationResult != 0) {
         // 编译错误
@@ -59,7 +59,7 @@ void Manager::judge(JudgeItem &judgeItem) {
     } else {
         // 更新状态为正在运行
         judgeStatus.setStatus(RUNNING);
-        RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus));
+        RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus, judgeItem));
         // 编译成功，运行源程序
         resultStatus = JudgeCore::run(judgeItem, judgeStatus);
         std::cout << "Judge Finished!" << this->ItemsQueue.size() << std::endl;
@@ -67,7 +67,7 @@ void Manager::judge(JudgeItem &judgeItem) {
     debug(resultStatus);
     // 更新评测结果
     judgeStatus.setStatus(resultStatus);
-    RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus));
+    RabbitMQ::sendMessage(Utils::parseJSON(judgeStatus, judgeItem));
     // 删除目录下所有文件
     Utils::DeleteAllFiles(folderPath);
     // 删除目录

@@ -122,6 +122,7 @@ bool JudgeCore::setUpIORedirection(STARTUPINFO &si, std::string runId, std::stri
     sa.lpSecurityDescriptor = NULL;
     sa.bInheritHandle = TRUE;
     // 子进程stdin重定向
+    debug(pid);
     std::string path = "../testcase/" + pid + "/" + caseNum + ".in";
     std::cout << "inpath" << path << std::endl;
     HANDLE hFileRead = CreateFile(path.c_str(),

@@ -57,6 +57,7 @@ bool RabbitMQ::close() {
 }
 
 bool RabbitMQ::sendMessage(std::string str) {
+    std::cout<<str<<std::endl;
     char *message = new char[str.size()];
     str.copy(message, str.size(), 0);
     amqp_bytes_t message_bytes;

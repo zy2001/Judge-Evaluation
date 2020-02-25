@@ -61,7 +61,7 @@ public:
 
     static JudgeItem parseJudgeItem(char *str);
 
-    static std::string parseJSON(JudgeStatus &judgeStatus);
+    static std::string parseJSON(JudgeStatus &judgeStatus, JudgeItem &judgeItem);
 };
 
 
